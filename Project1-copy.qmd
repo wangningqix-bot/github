@@ -1,0 +1,435 @@
+---
+title: "Project 1"
+author: "Group 13"
+number-sections: true
+format: 
+  html:
+    embed-resources: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# the lines above ensure that the R code in this block (along with any warning messages) will not be shown
+# load any libraries you will use here. E.g.
+library(tidyverse)
+library(ggplot2)
+library(gt)
+library(dplyr)
+library(readr)
+library(gridExtra)
+library(grid)
+```
+
+# Introduction {#sec-intro}
+
+With the global population growth and the increasing pressure on resources, the issue of food supply has gradually drawn more and more attention from the public. Agricultural production efficiency directly affects the ability to supply food, and it is also closely related to the level of economic development, poverty conditions, and population health. Moreover, there are differences in agricultural production and economic development levels among different regions, and these differences may further affect the nutritional status of the population. Therefore, analyzing the relationship between agricultural production conditions and food supply, as well as the relationship between food production, economic development, regional and population nutritional status, is of great significance for better improving food security-related issues and enhancing the happiness of human survival in different regions around the world. 
+
+This study utilized publicly available data from Our World in Data to conduct an empirical analysis of the relationship between agricultural production, economic development, and nutritional status. The research data mainly selected representative countries from Asia, Africa, and Europe during the period from 2019 to 2022 to reflect the development characteristics of different regions and enhance the comparability and practical relevance of the research results. 
+
+This study encompasses two main research directions. Firstly, it explores the relationship between cereal yield, fertilizer use, and agricultural land use to analyze the impact of agricultural inputs and land use on agricultural production efficiency. Secondly, it investigates the relationship between the prevalence of undernourishment, per capita GDP, cereal yield, and regions to examine the influence of economic development and agricultural production on the nutritional status of the population in different regions. 
+
+Through data processing and statistical analysis, this study aims to identify the main relationship between agricultural production conditions and food supply, and to examine the impact of economic development and agricultural production on population nutritional status, in order to provide a basis for understanding the differences in agricultural development and nutritional status among different regions. The results of this study can offer empirical references for issues related to agricultural development and food supply.
+
+# Exploratory Analysis {#sec-EA}
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+## read data
+
+# better use by different person 
+
+yield <- read_csv("cereal-yield.csv")
+
+fertilizer <- read_csv("fertilizer-use-per-hectare-of-cropland.csv")
+
+gdp <- read_csv("gdp-per-capita-worldbank.csv")
+
+undernourishment <- read_csv("prevalence-of-undernourishment.csv")
+
+land <- read_csv("share-of-land-area-used-for-agriculture.csv")
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+## merge the data , change the column name and delete unnecessary information
+
+datajoined <- yield %>%
+  inner_join(fertilizer, by = c("Entity", "Year"))%>%
+  inner_join(gdp, by = c("Entity", "Year"))%>%
+  inner_join(undernourishment, by = c("Entity", "Year"))%>%
+  inner_join(land, by = c("Entity", "Year"))%>%
+  rename(Country = Entity,
+         Yield = 'Cereals - Yield (tonnes per hectare)',
+         Fertilizer = 'Fertilizer use per hectare of cropland',
+         GDP = 'GDP per capita',
+         region = 'World region according to OWID',
+         undernourishment = '2.1.1 prevalence of undernourishment - Value (percent)',
+         land = 'Agricultural land (% of land area)'
+         )%>%
+  filter(Country != "World")%>%
+  select(-Code.x,-Code.y,-Code.x.x,-Code.y.y,-Code)
+
+##check column name
+
+#str(datajoined)
+
+##check the region and country
+
+#unique(datajoined$region)
+#unique(datajoined$Country)
+
+##select three region we need
+dataclean <- datajoined %>% filter(region == "Asia"|region == "Europe"|region == "Africa")
+
+## to count the year number to make sure the balance between different years
+
+#yearcount <- dataclean %>% count(Year)
+
+dataclean <- dataclean %>% filter(Year >= 2019 & Year <= 2022)
+#nrow(dataclean)
+
+## to write the data
+#write_csv(dataclean,"data_2019_2022.csv")
+
+```
+
+@tbl-summary1 summarizes agricultural data on Yield, Fertilizer, and Land use. Cereal yield has a mean of 3.72 and a median of 3.05, showing a right-skewed distribution with most values concentrated at lower levels but a few high-yield observations . Fertilizer use has a mean of 90.91, a median of 69.04, and a standard deviation of 94.96, indicating high variability and a wide range with extreme maximum values . Land use has a mean of 43.06 and a median of 44.34, with a relatively symmetric distribution but a broad range (2.70 to 84.56). Overall, all three variables exhibit some degree of skewness and variability, with fertilizer use showing the most pronounced fluctuation.
+
+```{r}
+#| echo: false
+#| label: tbl-summary1
+#| tbl-cap: Descriptive Statistics for Yield, Fertilizer Use, and Land Use  
+
+##question 1 cereal yield Vs fertilizer,land
+## to summarize the data and change the format to a better type to show
+dataclean |>
+  summarize(
+    'Yield.Mean' = mean(Yield),
+    'Yield.Median' = median(Yield),
+    'Yield.sd' = sd(Yield),
+    'Yield.Min' = min(Yield),
+    'Yield.Max' = max(Yield),
+    'Yield.IQR' = IQR(Yield),
+    'Yield.n_missing' = sum(is.na(Yield)),
+
+    'Fertilizer.Mean' = mean(Fertilizer),
+    'Fertilizer.Median' = median(Fertilizer),
+    'Fertilizer.sd' = sd(Fertilizer),
+    'Fertilizer.Min' = min(Fertilizer),
+    'Fertilizer.Max' = max(Fertilizer),
+    'Fertilizer.IQR' = IQR(Fertilizer),
+    'Fertilizer.n_missing' = sum(is.na(Fertilizer)),
+
+    'Land.Mean' = mean(land),
+    'Land.Median' = median(land),
+    'Land.sd' = sd(land),
+    'Land.Min' = min(land),
+    'Land.Max' = max(land),
+    'Land.IQR' = IQR(land),
+    'Land.n_missing' = sum(is.na(land))
+  ) |>
+  # Reshape the data from wide to long format
+  pivot_longer(
+    everything(),
+    names_to = c("Variable", ".value"),
+    names_pattern = "(.*)\\.(.*)"
+  ) |>
+  gt(rowname_col = "Variable") |>
+  fmt_number(
+    columns = -c(Variable, n_missing),
+    decimals = 2
+  ) |>
+  fmt_number(
+    columns = n_missing,
+    decimals = 0
+  ) |>
+  cols_label(
+    Mean = html("Mean"),
+    Median = html("Median"),
+    sd = html("Std.Dev"),
+    Min = html("Min"),
+    Max = html("Max"),
+    IQR = html("IQR"),
+    n_missing = html("Missing")
+  ) |>
+  tab_header(
+    title = md("**Summary Statistics of Agricultural Variables**")
+  )
+```
+
+@tbl-cor1 shows a moderate positive correlation (0.61) between Yield and Fertilizer, suggesting a beneficial impact of fertilizer on crop output. In contrast, weak negative correlations are observed between Yield and Land (-0.23), and Fertilizer and Land (-0.20). This implies that while fertilizer is a key positive driver for yield, simple land expansion might not directly boost yield, and extensive land use could even coincide with less intensive fertilizer application. Overall, the positive association between fertilizer use and agricultural yield is the most prominent.
+
+```{r}
+#| echo: false
+#| label: tbl-cor1
+#| tbl-cap: Pairwise Correlations of Agricultural Variables
+
+##use cor() to show the relationship between variables
+dataclean |>
+  summarize(
+    'Yield&Fertilizer' = cor(Yield, Fertilizer),
+    'Yield&Land' = cor(Yield, land),
+    'Fertilizer&Land' = cor(Fertilizer, land)
+  ) |>
+  # the same to before one, use long format for better visualization 
+  pivot_longer(
+    everything(),
+    names_to = "Variable_Pair",
+    values_to = "Correlation"
+  ) |>
+  gt() |>
+  fmt_number(
+    columns = Correlation,
+    decimals = 2
+  ) |>
+  cols_label(
+    Variable_Pair = "Variable Pair",
+    Correlation = "Correlation"
+  ) |>
+  tab_options(
+    column_labels.font.weight = "bold")
+
+```
+
+@fig-scat1 presents three scatter plots illustrating the relationships between Yield, Fertilizer, and Land, consistent with their respective correlation coefficients. The leftmost plot, depicting Yield against Fertilizer, visually confirms a moderate positive correlation (0.61), as higher fertilizer inputs generally correspond to increased yields. Conversely, both the middle plot (Yield vs. Land) and the rightmost plot (Fertilizer vs. Land) show widely dispersed data points. This visual scatter aligns with their weak negative correlations (-0.23 and -0.20), indicating no clear linear trend and suggesting that land use has little direct linear impact on either yield or fertilizer application.
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-cap: Relationships between Yield, Fertilizer and Land.
+#| label: fig-scat1
+#| fig-align: center
+#| fig-width: 6
+#| fig-height: 4.5
+
+## use ggplot to show relationships between Yield, Fertilizer, and Land.
+
+plot_yield_fertilizer <- ggplot(dataclean, aes(x = Fertilizer, y = Yield)) +
+  geom_point() +
+  labs(
+    x = "Fertilizer Use (kg/ha)",
+    y = "Yield (tonnes/ha)"
+  ) +
+  theme_minimal() +
+  geom_smooth(method = "lm", se = TRUE)
+
+plot_yield_land <- ggplot(dataclean, aes(x = land, y = Yield)) +
+  geom_point() +
+  labs(
+    x = "Ag. Land (% of Total)",
+    y = "Yield (tonnes/ha)"
+  ) +
+  theme_minimal() +
+  geom_smooth(method = "lm", se = TRUE)
+
+plot_fertilizer_land <- ggplot(dataclean, aes(x = land, y = Fertilizer)) +
+  geom_point() +
+  labs(
+    x = "Ag. Land (% of Total)",
+    y = "Fertilizer Use (kg/ha)"
+  ) +
+  theme_minimal() +
+  geom_smooth(method = "lm", se = TRUE)
+
+## to arrange the plots together and add title
+grid.arrange(plot_yield_fertilizer, plot_yield_land, plot_fertilizer_land, ncol = 3,top = textGrob("Relationships between Yield, Fertilizer and Land", gp = gpar(fontsize = 18, fontface = "bold")))
+
+```
+
+Across the descriptive statistical analysis of various regions(@tbl-summary2,@tbl-summary3,@tbl-summary4), Africa generally presents relatively lower levels in terms of agricultural yields and GDP, while also exhibiting the highest rates of undernourishment. In contrast, Europe demonstrates the strongest performance, with the lowest undernourishment rates and the highest figures for both agricultural output and GDP. Asia occupies a middle ground, showing moderate levels of undernourishment. However, it's particularly noteworthy that Asia's maximum values for both yield and GDP are considerably higher than its regional averages, suggesting a notable diversity within the continent, with pockets of highly developed economies and productive agricultural areas. Collectively, these three key indicators underscore a distinct regional imbalance in economic development, agricultural productivity, and overall well-being across Africa, Asia, and Europe.
+
+```{r}
+#| echo: false
+#| label: tbl-summary2
+#| tbl-cap: Descriptive Statistics for Undernourishment by Region  
+
+##question 2 Undernourishment Vs Yield，GDP，Region
+##Descriptive Statistics for Undernourishment by Region 
+dataclean |>
+  group_by(region) |>
+  summarize(
+    'Undernourishment.Mean' = mean(undernourishment),
+    'Undernourishment.Median' = median(undernourishment),
+    'Undernourishment.sd' = sd(undernourishment),
+    'Undernourishment.Min' = min(undernourishment),
+    'Undernourishment.Max' = max(undernourishment),
+    'Undernourishment.IQR' = IQR(undernourishment),
+    'Undernourishment.n_missing' = sum(is.na(undernourishment))
+  ) |>
+  gt() |>
+  fmt_number(decimals = 2) |>
+  cols_label(
+    'Undernourishment.Mean' = html("Mean"),
+    'Undernourishment.Median' = html("Median"),
+    'Undernourishment.sd' = html("Std. Dev"),
+    'Undernourishment.Min' = html("Min"),
+    'Undernourishment.Max' = html("Max"),
+    'Undernourishment.IQR' = html("IQR"),
+    'Undernourishment.n_missing' = html("Missing")
+  )
+
+```
+
+```{r}
+#| echo: false
+#| label: tbl-summary3
+#| tbl-cap: Descriptive Statistics for Yield by Region  
+
+##question 2 Undernourishment Vs Yield，GDP，Region
+##Descriptive Statistics for Yield by Region  
+dataclean |>
+  group_by(region) |>
+  summarize(
+    'Yield.Mean' = mean(Yield),
+    'Yield.Median' = median(Yield),
+    'Yield.sd' = sd(Yield),
+    'Yield.Min' = min(Yield),
+    'Yield.Max' = max(Yield),
+    'Yield.IQR' = IQR(Yield),
+    'Yield.n_missing' = sum(is.na(Yield))
+  ) |>
+  gt() |>
+  fmt_number(decimals = 2) |>
+  cols_label(
+    'Yield.Mean' = html("Mean"),
+    'Yield.Median' = html("Median"),
+    'Yield.sd' = html("Std. Dev"),
+    'Yield.Min' = html("Min"),
+    'Yield.Max' = html("Max"),
+    'Yield.IQR' = html("IQR"),
+    'Yield.n_missing' = html("Missing")
+  )
+
+
+```
+
+```{r}
+#| echo: false
+#| label: tbl-summary4
+#| tbl-cap: Descriptive Statistics for GDP by Region  
+
+##question 2 Undernourishment Vs Yield，GDP，Region
+##Descriptive Statistics for GDP by Region
+dataclean |>
+  group_by(region) |>
+  summarize(
+    'GDP.Mean' = mean(GDP),
+    'GDP.Median' = median(GDP),
+    'GDP.sd' = sd(GDP),
+    'GDP.Min' = min(GDP),
+    'GDP.Max' = max(GDP),
+    'GDP.IQR' = IQR(GDP),
+    'GDP.n_missing' = sum(is.na(GDP))
+  ) |>
+  gt() |>
+  fmt_number(decimals = 2) |>
+  cols_label(
+    'GDP.Mean' = html("Mean"),
+    'GDP.Median' = html("Median"),
+    'GDP.sd' = html("Std. Dev"),
+    'GDP.Min' = html("Min"),
+    'GDP.Max' = html("Max"),
+    'GDP.IQR' = html("IQR"),
+    'GDP.n_missing' = html("Missing")
+  )
+
+```
+
+@tbl-cor2 reveals a moderate negative correlation between the undernourishment rate and both yield (-0.42) and GDP (-0.54). This suggests that higher agricultural output or more developed economies tend to exhibit less prominent issues of undernourishment, with GDP showing a slightly stronger influence on undernourishment rates. Concurrently, a moderate positive correlation (0.53) exists between GDP and yield, indicating that economic development can foster advancements in agricultural productivity. Given this moderate correlation between GDP and yield, future modeling for prediction or explanation may require careful variable selection, depending on the specific model context, to circumvent potential multicollinearity issues. These correlations collectively highlight the crucial role of economic development and agricultural productivity in enhancing food security levels, thereby effectively reducing the incidence of undernourishment, though correlation does not imply causation.
+
+```{r}
+#| echo: false
+#| label: tbl-cor2
+#| tbl-cap: Pairwise Correlations of Nutritional, Agricultural, and Economic Indicators
+
+dataclean |>
+  summarize(
+    'Undernourishment&Yield' = cor(undernourishment, Yield),
+    'Undernourishment&GDP' = cor(undernourishment, GDP),
+    'GDP&Yield' = cor(GDP, Yield)
+  ) |>
+  # the same to before,use long format for better visualization  
+  pivot_longer(
+    everything(),
+    names_to = "Variable_Pair",
+    values_to = "Correlation"
+  ) |>
+  gt() |>
+  fmt_number(
+    columns = Correlation,
+    decimals = 2
+  ) |>
+  cols_label(
+    Variable_Pair = "Variable Pair",
+    Correlation = "Correlation"
+  ) |>
+  tab_options(
+    column_labels.font.weight = "bold")
+```
+
+@fig-scat2 illustrates the relationship between undernourishment rates and yield across different regions. Africa (red) generally faces high undernourishment rates and relatively low yields, but its fitted line shows that increased yield effectively reduces the undernourishment rate. Asia (green) has moderate undernourishment rates, and increased yield continues to contribute to improving its nutritional status, with a flatter fitted line compared to Africa. Europe (blue) has virtually eliminated undernourishment, and its undernourishment rate remains very low even with variations in yield. This indicates that while increasing yield generally helps reduce undernourishment, the current nutritional status and development levels of different regions lead to varying response patterns to changes in yield.
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-cap: Undernourishment Rate vs. Yield by Region
+#| label: fig-scat2
+#| fig-align: center
+#| fig-width: 6.5
+#| fig-height: 5.5
+
+# 1. Plot: Undernourishment vs. Yield, colored by Region
+ggplot(dataclean, aes(x = Yield, y = undernourishment, color = region)) +
+  geom_point(alpha = 0.6) +
+  labs(
+    title = "Undernourishment Rate vs. Yield Across Regions", 
+    x = "Yield (tonnes/ha)",
+    y = "Undernourishment Rate (%)", 
+    color = "Region"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_smooth(method = "lm", se = TRUE, aes(group = region))
+
+```
+
+@fig-scat3 clearly illustrates the inverse relationship between global undernourishment rates and GDP, showing different patterns by region. African regions (red) face high undernourishment rates at low GDP levels, while economic growth is of considerable help in improving this situation. Asian regions (green) have moderate undernourishment rates, and GDP growth continues to drive their reduction, though at a comparatively gentler pace. European regions (blue), with high GDP, have achieved very low undernourishment rates, indicating that after economic development reaches a certain level, the impact of GDP growth on undernourishment rates tends to stabilize.
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-cap: Undernourishment Rate vs. GDP by Region
+#| label: fig-scat3
+#| fig-align: center
+#| fig-width: 6.5
+#| fig-height: 5.5
+
+
+# 2. Plot: Undernourishment vs. GDP, colored by Region
+ggplot(dataclean, aes(x = GDP, y = undernourishment, color = region)) +
+  geom_point(alpha = 0.6) +
+  labs(
+    title = "Undernourishment Rate vs. GDP Across Regions",
+    x = "GDP ($)",
+    y = "Undernourishment Rate (%)",
+    color = "Region"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_smooth(method = "lm", se = TRUE, aes(group = region), level = 0.95)
+
+```
+
+
